@@ -23,7 +23,7 @@ class Patient(BaseModel):
     gender : Annotated[Literal["male", "female", "others"], Field(..., description = "Gender of the patient")]
     height : Annotated[float, Field(..., gt = 0, description = "Heght of the patient in mtrs")]
     weight : Annotated[float, Field(..., gt = 0, description = "Weight of the patient in Kgs")]
-
+    
     @computed_field
     @property
     def bmi(self) -> float:
@@ -48,7 +48,7 @@ class PatientUpdate(BaseModel):
     name : Annotated[Optional[str], Field(default = "None")]
     city : Annotated[Optional[str], Field(default = "None")]
     age : Annotated[Optional[int], Field(default = "None", gt = 0)]
-    gender : Annotated[Optional[Literal["male", "feamle"]], Field(default = "None")]
+    gender : Annotated[Optional[Literal["male", "female"]], Field(default = "None")]
     height : Annotated[Optional[float], Field(default = "None", gt = 0)]
     weight : Annotated[Optional[float], Field(default = "None", gt = 0)]
 
