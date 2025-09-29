@@ -1,11 +1,9 @@
-# app/security.py
 import os
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 
-# load from env in production
 SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
