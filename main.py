@@ -1,13 +1,11 @@
-from fastapi import FastAPI, Path, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, computed_field
-from typing import Annotated, Literal, Optional
-import json
+from routers import patients, users
+from database import database
 
-app = FastAPI()
+app = FastAPI(title = "Hospital Management System")
 
-app.add_middleware(
+app.add_middlewares(
     CORSMiddleware,
     allow_origins = ["http://localhost:5173"],
     allow_credentials = True,
@@ -15,147 +13,14 @@ app.add_middleware(
     allow_headers = ["*"]
 )
 
-class Patient(BaseModel):
-    id : Annotated[str, Field(..., description = "ID of the patient", example = "P001")]
-    name : Annotated[str, Field(..., description = "Name of the patient")]
-    city : Annotated[str, Field(..., description = "City where the patient lives")]
-    age : Annotated[int, Field(..., description = "Age of the patient")]
-    gender : Annotated[Literal["male", "female", "others"], Field(..., description = "Gender of the patient")]
-    height : Annotated[float, Field(..., gt = 0, description = "Heght of the patient in mtrs")]
-    weight : Annotated[float, Field(..., gt = 0, description = "Weight of the patient in Kgs")]
-    
-    @computed_field
-    @property
-    def bmi(self) -> float:
-        bmi =  self.weight / (self.height ** 2)
-        return round(bmi, 2)
-    
-
-    @computed_field
-    @property
-    def verdict(self) -> str:
-        if self.bmi < 18.5:
-            return "Underweight"
-        elif self.bmi < 25:
-            return "Normal"
-        elif self.bmi < 30:
-            return "Normal"
-        else:
-            return "Obesse"
- 
-
-class PatientUpdate(BaseModel):
-    name : Annotated[Optional[str], Field(default = "None")]
-    city : Annotated[Optional[str], Field(default = "None")]
-    age : Annotated[Optional[int], Field(default = "None", gt = 0)]
-    gender : Annotated[Optional[Literal["male", "female"]], Field(default = "None")]
-    height : Annotated[Optional[float], Field(default = "None", gt = 0)]
-    weight : Annotated[Optional[float], Field(default = "None", gt = 0)]
-
-def load_data():
-    with open("patients.json", "r") as f:
-        data = json.load(f)
-    
-    return data
-
-def save_data(data):
-    with open("patients.json", "w") as f:
-        json.dump(data, f)
-
-@app.get("/")
-def index():
-    return {"message" : "Patient Management System API"}
-
-@app.get("/about")
-def show_info():
-    return {"message" : "A Fully functional API to manage your patient records"}
-
-@app.get("/view")
-def show_details():
-    data = load_data()
-    return list(data.values())  
+@app.on_event("startup")
+async def startup():
+    await database.connect()
 
 
-@app.get("/patient/{patient_id}")
-def show_patient_details(patient_id : str = Path(..., description = "ID of the patient in the DB", example = "P001")):
-    data = load_data()
+@app.on_event("shutdown")
+async def shutdown():
+    await database.disconnect()
 
-    if patient_id in data:
-        return data[patient_id]
-    raise HTTPException(status_code = 404, detail = "Patient Not Found")
-
-
-@app.get("/sort")
-def sort_patients(sort_by : str = Query(..., description = "Sort on basis of height, weight and bmi"), order : str = Query('asc', description = "Sort in asc or desc order")):
-    valid_fields = ["height", "weight", "bmi"]
-
-    if sort_by not in valid_fields:
-        raise HTTPException(status_code = 404, detail = f"Invalid Field select from {valid_fields}")
-    
-    if order not in ["asc", "desc"]:
-        raise HTTPException(status_code = 404, detail = "Invalid order select between asc or desc")
-    
-    data = load_data()
-
-    sort_order = True if order == "desc" else False
-
-    sorted_data = sorted(data.values(), key = lambda x : x.get(sort_by, 0), reverse = sort_order)
-
-    return sorted_data
-
-
-@app.post("/create_patient")
-def create_patient(patient : Patient):
-    # load the existing data
-    data = load_data()
-
-    # check the new data exists or not
-    if patient.id in data:
-        raise HTTPException(status_code = 400, detail = "patient already exists")
-
-    # save the new data
-    data[patient.id] = patient.model_dump(exclude = ["id"])
-
-    save_data(data)
-
-    return JSONResponse(status_code = 201, content = {"message" : "Patient created successfully"})
-
-
-@app.put("/edit/{patient_id}")
-def update_patient(patient_id:str, patient_update : PatientUpdate):
-    
-    data = load_data()
-    
-    if patient_id not in data:
-        raise HTTPException(status_code = 400, detail = "Patient Not Found")
-    
-    existing_patient_info = data[patient_id]
-
-    updated_patient_info = patient_update.model_dump(exclude_unset = True)
-
-    for key, value in updated_patient_info.items():
-        existing_patient_info[key] = value
-
-    existing_patient_info['id'] = patient_id
-    patient_pydantic_obj = Patient(**existing_patient_info)
-
-    existing_patient_info = patient_pydantic_obj.model_dump(exclude = "id")
-
-    data[patient_id] = existing_patient_info
-
-    save_data(data)
-
-    return JSONResponse(status_code = 200, content = {"message" : "patient details Updated"})
-
-@app.delete("/delete/{patient_id}")
-def delete_patient(patient_id : str):
-    data = load_data()
-
-    if patient_id not in data:
-        raise HTTPException(status_code = 400, detail = "Patient Not Found")
-    
-    del data[patient_id]
-
-    save_data(data)
-
-    return JSONResponse(status_code = 200, content = {"message" : "Patient Details Deleted"})
+app.include_router(patients.router) 
+app.include_router(users.router)
